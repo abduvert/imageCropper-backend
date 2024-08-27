@@ -7,13 +7,18 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { format } = require('date-fns');
+const compression = require('compression');
+
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json()); // Parse JSON request bodies
+
+//middlewares
+app.use(cors())
+app.use(compression())
+app.use(express.json())
 
 // Configure multer for file uploads
 const upload = multer();

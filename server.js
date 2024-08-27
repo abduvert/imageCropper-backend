@@ -8,13 +8,17 @@ const cors = require('cors');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { format } = require('date-fns');
 
+// Load environment variables
 dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use(express.json()); // Parse JSON request bodies
 
+// Configure multer for file uploads
 const upload = multer();
 
+// Initialize the S3 client
 const s3Client = new S3Client({
   region: process.env.REGION,
   credentials: {
@@ -23,6 +27,7 @@ const s3Client = new S3Client({
   },
 });
 
+// Image crop and process route
 app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
   const { cropWidth, cropHeight } = req.body;
   const image = req.file;
@@ -49,6 +54,7 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
     let x = 0;
     let y = 0;
 
+    // Loop to iterate over the image for cropping
     while (y < metadata.height) {
       while (x < metadata.width) {
         const cropArea = {
@@ -69,6 +75,7 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
       y += cropHeightInt;
     }
 
+    // Zip the cropped images
     const zipContent = await zip.generateAsync({ type: 'nodebuffer' });
     const timestamp = format(new Date(), 'yyyyMMddHHmmss');
     const zipFileName = `cropped_images_${timestamp}.zip`;
@@ -87,9 +94,9 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
       Key: zipFileName,
     });
 
+    // Generate a signed URL for downloading the zip file
     const url = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 }); // URL valid for 1 hour
 
-    // Notify the client to request deletion after download
     res.json({ fileUrl: url, fileName: zipFileName });
 
   } catch (error) {
@@ -98,7 +105,7 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
   }
 });
 
-// Endpoint to delete the file after download
+// File deletion route
 app.post('/api/delete-file', async (req, res) => {
   const { filename } = req.body;
 
@@ -120,6 +127,8 @@ app.post('/api/delete-file', async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log('Server running on port 5000');
+// Start the server
+const port = process.env.PORT || 5000;
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

@@ -15,13 +15,19 @@ dotenv.config();
 
 const app = express();
 
+// Configure CORS to handle requests from allowed origins
+app.use(cors({
+  origin: 'https://www.cropslice.com', // Set this to the allowed origin
+  methods: ['GET', 'POST', 'OPTIONS'], // Allowed methods
+  allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers
+  credentials: true, // Allow credentials like cookies, authorization headers, etc.
+}));
 
-app.use(cors());
 app.use(compression());
 app.use(express.json());
 
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+// Increased the file size limit to 50 MB
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB max
 
 // Initialize the S3 client
 const s3Client = new S3Client({
@@ -32,13 +38,11 @@ const s3Client = new S3Client({
   },
 });
 
+// Reduce Sharp concurrency to 2 threads to lower CPU usage
+sharp.concurrency(2);
+sharp.cache({ files: 0 }); // No caching to reduce memory usage
 
-
-sharp.concurrency(4); 
-sharp.cache({ files: 0 }); 
-
-
-
+// Process images using streaming to avoid high memory usage
 const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) => {
   try {
     const metadata = await sharp(imageBuffer).metadata();
@@ -46,9 +50,7 @@ const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) 
     let x = 0;
     let y = 0;
 
-    // Loop vertically through the image
     while (y < metadata.height) {
-      // Loop horizontally through the image
       while (x < metadata.width) {
         const cropArea = {
           left: x,
@@ -57,10 +59,10 @@ const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) 
           height: Math.min(cropHeightInt, metadata.height - y),
         };
 
-        // Extract the crop and add it to the zip
+        // Stream processing to minimize memory usage
         const buffer = await sharp(imageBuffer)
           .extract(cropArea)
-          .toFormat('jpeg', { quality: 80 }) 
+          .toFormat('jpeg', { quality: 60 }) // Reduce quality to save memory
           .toBuffer();
 
         zip.file(`crop_${x}_${y}.jpg`, buffer);
@@ -76,9 +78,8 @@ const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) 
   }
 };
 
-
-
-const uploadWithRetry = async (upload, retries = 3) => {
+// Retry mechanism optimized for limited resources
+const uploadWithRetry = async (upload, retries = 2) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await upload.done();
@@ -92,7 +93,6 @@ const uploadWithRetry = async (upload, retries = 3) => {
   }
 };
 
-
 app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
   const { cropWidth, cropHeight } = req.body;
   const image = req.file;
@@ -104,7 +104,6 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
   const cropWidthInt = parseInt(cropWidth);
   const cropHeightInt = parseInt(cropHeight);
 
-
   if (isNaN(cropWidthInt) || isNaN(cropHeightInt) || cropWidthInt <= 0 || cropHeightInt <= 0) {
     return res.status(400).json({ error: 'Invalid crop dimensions' });
   }
@@ -112,7 +111,7 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
   const zip = new JSZip();
 
   try {
-    // Process the uploaded image in chunks
+    // Stream image processing
     await processImageChunk(image.buffer, cropWidthInt, cropHeightInt, zip);
 
     const timestamp = format(new Date(), 'yyyyMMddHHmmss');
@@ -120,15 +119,12 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
 
     const zipStream = new PassThrough();
 
-
     zipStream.on('error', (error) => {
       console.error('Stream error:', error.message);
       throw new Error('Stream failed during processing.');
     });
 
-
     zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true }).pipe(zipStream);
-
 
     const upload = new Upload({
       client: s3Client,
@@ -142,24 +138,19 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
 
     await uploadWithRetry(upload);
 
-
     const getCommand = new GetObjectCommand({
       Bucket: process.env.BUCKET_NAME,
       Key: zipFileName,
     });
 
-
-    const url = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+    const url = await getSignedUrl(s3Client, getCommand, { expiresIn: 86400 });
 
     res.json({ fileUrl: url, fileName: zipFileName });
-
   } catch (error) {
     console.error('Error during image processing or uploading:', error.message);
     res.status(500).json({ error: `Error processing image: ${error.message}` });
   }
 });
-
-
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {

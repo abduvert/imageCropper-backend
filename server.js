@@ -15,14 +15,10 @@ dotenv.config();
 
 const app = express();
 
-// Configure CORS to handle requests from allowed origins
-app.use(cors({
-  origin: 'https://www.cropslice.com', // Set this to the allowed origin
-  methods: ['GET', 'POST', 'OPTIONS'], // Allowed methods
-  allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers
-  credentials: true, // Allow credentials like cookies, authorization headers, etc.
-}));
+// Simplified CORS configuration
+app.use(cors());
 
+// Enable compression and JSON parsing
 app.use(compression());
 app.use(express.json());
 
@@ -38,9 +34,9 @@ const s3Client = new S3Client({
   },
 });
 
-// Reduce Sharp concurrency to 2 threads to lower CPU usage
-sharp.concurrency(2);
-sharp.cache({ files: 0 }); // No caching to reduce memory usage
+// Sharp configuration adjustments
+sharp.concurrency(1); // Set to single thread to avoid high resource usage on t2.micro
+sharp.cache(false); // Disable caching to reduce memory usage
 
 // Process images using streaming to avoid high memory usage
 const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) => {

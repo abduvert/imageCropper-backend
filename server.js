@@ -15,15 +15,17 @@ dotenv.config();
 
 const app = express();
 
-const corsOptions = {
-  origin: ['https://www.cropslice.com'], 
-  methods: ['GET', 'POST', 'PUT', 'HEAD'], 
-  allowedHeaders: ['Content-Type'], 
-  credentials: true, 
-};
+// const corsOptions = {
+//   origin: ['https://www.cropslice.com'], 
+//   methods: ['GET', 'POST', 'PUT', 'HEAD'], 
+//   allowedHeaders: ['Content-Type'], 
+//   credentials: true, 
+// };
 
-app.use(cors(corsOptions));
+// app.use(cors(corsOptions));
 
+
+app.use(cors())
 app.use(compression());
 app.use(express.json());
 
@@ -39,6 +41,7 @@ const s3Client = new S3Client({
 });
 
 
+sharp.concurrency(1)
 sharp.cache(false); // Disable caching to reduce memory usage
 
 

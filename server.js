@@ -15,14 +15,18 @@ dotenv.config();
 
 const app = express();
 
-// Simplified CORS configuration
-app.use(cors());
+const corsOptions = {
+  origin: ['https://www.cropslice.com'], 
+  methods: ['GET', 'POST', 'PUT', 'HEAD'], 
+  allowedHeaders: ['Content-Type'], 
+  credentials: true, 
+};
 
-// Enable compression and JSON parsing
+app.use(cors(corsOptions));
+
 app.use(compression());
 app.use(express.json());
 
-// Increased the file size limit to 50 MB
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB max
 
 // Initialize the S3 client
@@ -34,11 +38,10 @@ const s3Client = new S3Client({
   },
 });
 
-// Sharp configuration adjustments
-sharp.concurrency(1); // Set to single thread to avoid high resource usage on t2.micro
+
 sharp.cache(false); // Disable caching to reduce memory usage
 
-// Process images using streaming to avoid high memory usage
+
 const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) => {
   try {
     const metadata = await sharp(imageBuffer).metadata();

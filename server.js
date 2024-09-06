@@ -17,8 +17,11 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: 'https://www.cropslice.com', // allow requests from this origin
+  origin: '*', // allow requests from any origin
   credentials: true, // allow credentials (e.g., cookies) to be sent
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // allow all HTTP methods
+  allowedHeaders: ['Content-Type', 'Authorization'], 
+  maxAge: 7200, 
 }));
 app.use(compression());
 app.use(express.json());

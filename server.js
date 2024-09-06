@@ -16,7 +16,10 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: 'https://www.cropslice.com', // allow requests from this origin
+  credentials: true, // allow credentials (e.g., cookies) to be sent
+}));
 app.use(compression());
 app.use(express.json());
 
@@ -107,7 +110,6 @@ app.post('/api/crop-and-process', upload.single('image'), async (req, res) => {
   const zip = new JSZip();
 
   try {
-    // Stream image processing
     await processImageChunk(image.buffer, cropWidthInt, cropHeightInt, zip);
 
     const timestamp = format(new Date(), 'yyyyMMddHHmmss');

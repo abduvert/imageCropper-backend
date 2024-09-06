@@ -10,22 +10,13 @@ const { format } = require('date-fns');
 const compression = require('compression');
 const { PassThrough } = require('stream');
 const { Upload } = require('@aws-sdk/lib-storage');
+const retry = require('async-retry');
 
 dotenv.config();
 
 const app = express();
 
-// const corsOptions = {
-//   origin: ['https://www.cropslice.com'], 
-//   methods: ['GET', 'POST', 'PUT', 'HEAD'], 
-//   allowedHeaders: ['Content-Type'], 
-//   credentials: true, 
-// };
-
-// app.use(cors(corsOptions));
-
-
-app.use(cors())
+app.use(cors());
 app.use(compression());
 app.use(express.json());
 
@@ -40,10 +31,8 @@ const s3Client = new S3Client({
   },
 });
 
-
-sharp.concurrency(1)
+sharp.concurrency(1);
 sharp.cache(false); // Disable caching to reduce memory usage
-
 
 const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) => {
   try {
@@ -61,11 +50,16 @@ const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) 
           height: Math.min(cropHeightInt, metadata.height - y),
         };
 
-        // Stream processing to minimize memory usage
-        const buffer = await sharp(imageBuffer)
+        const imageStream = sharp(imageBuffer)
           .extract(cropArea)
-          .toFormat('jpeg', { quality: 60 }) // Reduce quality to save memory
-          .toBuffer();
+          .toFormat('jpeg', { quality: 60 });
+
+        const buffer = await new Promise((resolve, reject) => {
+          const chunks = [];
+          imageStream.on('data', (chunk) => chunks.push(chunk));
+          imageStream.on('end', () => resolve(Buffer.concat(chunks)));
+          imageStream.on('error', (err) => reject(err));
+        });
 
         zip.file(`crop_${x}_${y}.jpg`, buffer);
 
@@ -80,18 +74,18 @@ const processImageChunk = async (imageBuffer, cropWidthInt, cropHeightInt, zip) 
   }
 };
 
-// Retry mechanism optimized for limited resources
-const uploadWithRetry = async (upload, retries = 2) => {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
+const uploadWithRetry = async (upload) => {
+  try {
+    await retry(async () => {
       await upload.done();
-      return;
-    } catch (error) {
-      console.error(`Attempt ${attempt} failed:`, error.message);
-      if (attempt === retries) {
-        throw new Error('Failed to upload after multiple attempts.');
-      }
-    }
+    }, {
+      retries: 3,
+      minTimeout: 1000,
+      maxTimeout: 3000,
+    });
+  } catch (error) {
+    console.error('Failed to upload after multiple attempts:', error.message);
+    throw new Error('Failed to upload after multiple attempts.');
   }
 };
 

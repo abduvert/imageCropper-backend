@@ -17,7 +17,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: '*', // allow requests from any origin
+  origin: 'https://www.cropslice.com', // allow requests from a single origin
   credentials: true, // allow credentials (e.g., cookies) to be sent
   methods: ['GET', 'POST', 'PUT', 'DELETE'], // allow all HTTP methods
   allowedHeaders: ['Content-Type', 'Authorization'], 
